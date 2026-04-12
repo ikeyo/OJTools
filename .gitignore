@@ -1,0 +1,8 @@
+.vs/
+*.exe
+*.dll
+*.test
+*.out
+config.json
+window-layout.json
+
