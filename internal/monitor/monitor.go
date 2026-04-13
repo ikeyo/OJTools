@@ -30,6 +30,61 @@ type Pair struct {
 	OverlapBottom int32
 }
 
+func (p Pair) PrimaryMonitor() Monitor {
+	if p.Left.Primary && !p.Right.Primary {
+		return p.Left
+	}
+	if p.Right.Primary && !p.Left.Primary {
+		return p.Right
+	}
+	return p.Left
+}
+
+func (p Pair) SecondaryMonitor() Monitor {
+	if p.Left.Primary && !p.Right.Primary {
+		return p.Right
+	}
+	if p.Right.Primary && !p.Left.Primary {
+		return p.Left
+	}
+	return p.Right
+}
+
+func (p Pair) PrimaryOnLeft() bool {
+	primary := p.PrimaryMonitor()
+	return primary.DeviceName == p.Left.DeviceName
+}
+
+func (p Pair) ContainsOverlapY(y float64) bool {
+	return y >= float64(p.OverlapTop) && y < float64(p.OverlapBottom)
+}
+
+func (p Pair) CrossingFromLeftToRight(prev, current win32.POINT) (float64, bool) {
+	if !pointInside(prev, p.Left.Bounds) || current.X < p.Right.Bounds.Left {
+		return 0, false
+	}
+
+	y, ok := crossingYAtX(prev, current, p.Right.Bounds.Left)
+	if !ok || !p.ContainsOverlapY(y) {
+		return 0, false
+	}
+
+	return y, true
+}
+
+func (p Pair) CrossingFromRightToLeft(prev, current win32.POINT) (float64, bool) {
+	if !pointInside(prev, p.Right.Bounds) || current.X >= p.Left.Bounds.Right {
+		return 0, false
+	}
+
+	y, ok := crossingYAtX(prev, current, p.Left.Bounds.Right)
+	if !ok || !p.ContainsOverlapY(y) {
+		return 0, false
+	}
+
+	return y, true
+}
+
 func Enumerate() ([]Monitor, error) {
 	monitors := make([]Monitor, 0, 4)
 
@@ -143,6 +198,27 @@ func ordered(a, b Monitor) (Monitor, Monitor) {
 		return a, b
 	}
 	return b, a
+}
+
+func pointInside(point win32.POINT, rect win32.RECT) bool {
+	return point.X >= rect.Left &&
+		point.X < rect.Right &&
+		point.Y >= rect.Top &&
+		point.Y < rect.Bottom
+}
+
+func crossingYAtX(prev, current win32.POINT, x int32) (float64, bool) {
+	dx := current.X - prev.X
+	if dx == 0 {
+		return 0, false
+	}
+
+	t := float64(x-prev.X) / float64(dx)
+	if t < 0 || t > 1 {
+		return 0, false
+	}
+
+	return float64(prev.Y) + (float64(current.Y-prev.Y) * t), true
 }
 
 func abs32(v int32) int32 {

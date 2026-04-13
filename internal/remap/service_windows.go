@@ -33,19 +33,20 @@ const (
 	trayCallbackMessage        = win32.WM_APP + 1
 	trayIconID                 = 1
 	trayCalibrationCommand     = 997
-	trayPauseCommand           = 998
-	trayAutoStartCommand       = 999
-	trayRestoreOnLaunchCommand = 1000
-	trayShakeHighlightCommand  = 1001
-	trayShakeDelay500Command   = 1002
-	trayShakeDelay1000Command  = 1003
-	trayShakeDelay2000Command  = 1004
-	traySaveLayoutCommand      = 1005
-	trayRestoreLayoutCommand   = 1006
-	trayClearLayoutCommand     = 1007
-	trayOpenConfigCommand      = 1008
-	trayAboutCommand           = 1009
-	trayExitCommand            = 1010
+	trayResetCalibrationCommand = 998
+	trayPauseCommand            = 999
+	trayAutoStartCommand        = 1000
+	trayRestoreOnLaunchCommand  = 1001
+	trayShakeHighlightCommand   = 1002
+	trayShakeDelay500Command    = 1003
+	trayShakeDelay1000Command   = 1004
+	trayShakeDelay2000Command   = 1005
+	traySaveLayoutCommand       = 1006
+	trayRestoreLayoutCommand    = 1007
+	trayClearLayoutCommand      = 1008
+	trayOpenConfigCommand       = 1009
+	trayAboutCommand            = 1010
+	trayExitCommand             = 1011
 
 	shakeWindow      = 750 * time.Millisecond
 	shakeMinSegment  = 10.0
@@ -138,7 +139,7 @@ func (s *Service) installTray(instance win32.HINSTANCE) error {
 	}
 
 	hwnd, err := win32.CreateWindowEx(
-		0,
+		win32.WS_EX_TOOLWINDOW|win32.WS_EX_NOACTIVATE,
 		trayClassName,
 		"OJTools Tray",
 		win32.WS_POPUP,
@@ -154,6 +155,8 @@ func (s *Service) installTray(instance win32.HINSTANCE) error {
 	if err != nil {
 		return err
 	}
+	_ = win32.SetWindowPos(hwnd, 0, -32000, -32000, 0, 0, win32.SWP_NOSIZE|win32.SWP_NOZORDER|win32.SWP_NOACTIVATE)
+	win32.ShowWindow(hwnd, win32.SW_HIDE)
 	s.HWND = hwnd
 
 	icon, err := createTrayIcon()
@@ -287,6 +290,9 @@ func (s *Service) showTrayMenu(hwnd win32.HWND) uintptr {
 	if err := appendMenuItem(menu, trayCalibrationCommand, "Cursor Calibration...", false, false); err != nil {
 		return 0
 	}
+	if err := appendMenuItem(menu, trayResetCalibrationCommand, "Reset DPI Calibration", false, false); err != nil {
+		return 0
+	}
 	if err := appendMenuItem(menu, trayPauseCommand, "Pause Cursor Remap", s.Paused, false); err != nil {
 		return 0
 	}
@@ -353,6 +359,8 @@ func (s *Service) showTrayMenu(hwnd win32.HWND) uintptr {
 		if err := s.startCalibration(); err == nil {
 			win32.DestroyWindow(hwnd)
 		}
+	case trayResetCalibrationCommand:
+		_ = s.resetCalibration()
 	case trayPauseCommand:
 		s.Paused = !s.Paused
 		s.HavePrev = false
@@ -415,17 +423,31 @@ func (s *Service) startCalibration() error {
 	return cmd.Start()
 }
 
+func (s *Service) resetCalibration() error {
+	pairKey := monitor.PairKey(s.Pair)
+	s.Config.Delete(pairKey)
+	s.Transform = calibration.DefaultTransform(s.Pair)
+	s.HavePrev = false
+	return saveAppConfig(s.ConfigPath, s.Config)
+}
+
 func (s *Service) remap(prev, current win32.POINT) (win32.POINT, bool) {
-	if inside(prev, s.Pair.Left.Bounds) && current.X >= s.Pair.Right.Bounds.Left {
-		y := calibration.MapLeftToRight(s.Pair, s.Transform, float64(current.Y))
+	if crossingY, ok := s.Pair.CrossingFromLeftToRight(prev, current); ok {
+		y := calibration.MapSecondaryToPrimary(s.Pair, s.Transform, crossingY)
+		if s.Pair.PrimaryOnLeft() {
+			y = calibration.MapPrimaryToSecondary(s.Pair, s.Transform, crossingY)
+		}
 		return win32.POINT{
 			X: s.Pair.Right.Bounds.Left + 2,
 			Y: clamp(int32(math.Round(y)), s.Pair.Right.Bounds.Top, s.Pair.Right.Bounds.Bottom-1),
 		}, true
 	}
 
-	if inside(prev, s.Pair.Right.Bounds) && current.X < s.Pair.Left.Bounds.Right {
-		y := calibration.MapRightToLeft(s.Pair, s.Transform, float64(current.Y))
+	if crossingY, ok := s.Pair.CrossingFromRightToLeft(prev, current); ok {
+		y := calibration.MapPrimaryToSecondary(s.Pair, s.Transform, crossingY)
+		if s.Pair.PrimaryOnLeft() {
+			y = calibration.MapSecondaryToPrimary(s.Pair, s.Transform, crossingY)
+		}
 		return win32.POINT{
 			X: s.Pair.Left.Bounds.Right - 2,
 			Y: clamp(int32(math.Round(y)), s.Pair.Left.Bounds.Top, s.Pair.Left.Bounds.Bottom-1),
@@ -555,13 +577,6 @@ func (s *Service) resetShakeDetector(point win32.POINT, now time.Time) {
 	}}
 }
 
-func inside(point win32.POINT, rect win32.RECT) bool {
-	return point.X >= rect.Left &&
-		point.X < rect.Right &&
-		point.Y >= rect.Top &&
-		point.Y < rect.Bottom
-}
-
 func clamp(v, min, max int32) int32 {
 	if v < min {
 		return min
@@ -580,6 +595,19 @@ func absInt32(v int32) int32 {
 }
 
 func createTrayIcon() (win32.HICON, error) {
+	exePath, err := os.Executable()
+	if err == nil {
+		icon, err := win32.ExtractSmallIcon(exePath)
+		if err == nil {
+			return icon, nil
+		}
+	}
+
+	icon, err := win32.LoadIcon(win32.IDI_APPLICATION)
+	if err == nil {
+		return icon, nil
+	}
+
 	pattern := []string{
 		"................",
 		"................",

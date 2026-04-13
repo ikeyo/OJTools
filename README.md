@@ -8,6 +8,7 @@ The project focuses on a common annoyance: the mouse pointer lands too high or t
 
 - Detects the best side-by-side monitor pair automatically
 - Opens a calibration overlay with live preview while you test cursor crossing
+- Uses the primary monitor as the reference ruler and derives the secondary monitor start position from the real Windows monitor layout
 - Saves a reusable `scale` and `offset` transform per monitor pair
 - Runs a tray-based background remapper for everyday use
 - Supports Windows auto-start from the current user registry
@@ -16,10 +17,11 @@ The project focuses on a common annoyance: the mouse pointer lands too high or t
 
 ## How Calibration Works
 
-The left monitor is treated as the reference ruler.
+The primary monitor is treated as the reference ruler, and the secondary monitor is calibrated against it.
 
-- `scale` stretches or compresses the right-side mapping
+- `scale` stretches or compresses the secondary-side mapping
 - `offset` shifts the mapped cursor position up or down
+- The ruler overlay uses the actual monitor bounds reported by Windows, so the secondary side starts from the matching position on the primary ruler instead of resetting to zero
 - The saved transform is reused whenever the cursor crosses that monitor pair again
 
 ## Commands
@@ -45,6 +47,8 @@ Or use the bundled build helper:
 ```powershell
 .\build.ps1
 ```
+
+The build helper generates a Windows GUI executable, downloads a Material icon source, and embeds the application icon resource automatically.
 
 Manage Windows auto-start:
 
@@ -72,6 +76,7 @@ While the calibration overlay is open, test crossings use the current unsaved va
 When `run` is active, right-click the tray icon to access:
 
 - `Cursor Calibration...`
+- `Reset DPI Calibration`
 - `Pause Cursor Remap`
 - `Auto-Start`
 - `Restore Layout On Launch`
@@ -95,12 +100,14 @@ Both files are written next to the built executable, or to the current working d
 
 ## Notes And Limits
 
-- The current implementation assumes the main monitor pair is arranged side-by-side.
+- The current implementation assumes the active monitor pair is arranged side-by-side, but it also respects the real vertical offset and overlap reported by Windows for that pair.
 - Auto-start uses `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` and launches `OJTools.exe run`.
-- Saving a window layout marks it for one automatic restore on the next launch, which is useful after sign-in or reboot.
+- Saving a window layout stores the Windows virtual desktop placement for each captured window, so multi-monitor layouts can be restored as long as the monitor arrangement stays compatible.
+- If monitor count, primary monitor, scaling, or relative placement changes significantly after saving, some restored windows can land on a different monitor or off-screen because layout restore currently saves window placement coordinates, not per-monitor attachment metadata.
 - Tray checkmarks reflect paused remap state, auto-start state, restore-on-launch state, and shake highlight state.
 - The shake highlight stays suppressed while a fullscreen foreground app is active.
 - The first run can start from the Windows DPI ratio, then be refined manually with the ruler overlay.
+- OJTools itself does not include an in-app Git commit or push feature. Source changes are still published through a normal Git workflow outside the tray UI.
 
 ## Repository Layout
 

@@ -275,6 +275,7 @@ var (
 	procTextOutW         = gdi32.NewProc("TextOutW")
 
 	procGetModuleHandleW           = kernel32.NewProc("GetModuleHandleW")
+	procGetConsoleWindow           = kernel32.NewProc("GetConsoleWindow")
 	procOpenProcess                = kernel32.NewProc("OpenProcess")
 	procCloseHandle                = kernel32.NewProc("CloseHandle")
 	procQueryFullProcessImageNameW = kernel32.NewProc("QueryFullProcessImageNameW")
@@ -284,6 +285,7 @@ var (
 
 	shell32              = syscall.NewLazyDLL("shell32.dll")
 	procShellNotifyIconW = shell32.NewProc("Shell_NotifyIconW")
+	procExtractIconExW   = shell32.NewProc("ExtractIconExW")
 )
 
 func (r RECT) Width() int32 {
@@ -312,6 +314,11 @@ func GetModuleHandle() (HINSTANCE, error) {
 		return 0, err
 	}
 	return HINSTANCE(r1), nil
+}
+
+func GetConsoleWindow() HWND {
+	r1, _, _ := procGetConsoleWindow.Call()
+	return HWND(r1)
 }
 
 func OpenProcess(desiredAccess uint32, inheritHandle bool, processID uint32) (HANDLE, error) {
@@ -864,6 +871,26 @@ func ShellNotifyIcon(message uint32, data *NOTIFYICONDATA) error {
 		return err
 	}
 	return nil
+}
+
+func ExtractSmallIcon(path string) (HICON, error) {
+	pathPtr, err := syscall.UTF16PtrFromString(path)
+	if err != nil {
+		return 0, err
+	}
+
+	var icon HICON
+	r1, _, callErr := procExtractIconExW.Call(
+		uintptr(unsafe.Pointer(pathPtr)),
+		0,
+		0,
+		uintptr(unsafe.Pointer(&icon)),
+		1,
+	)
+	if r1 == 0 || icon == 0 {
+		return 0, callErr
+	}
+	return icon, nil
 }
 
 func SetNotifyIconTip(data *NOTIFYICONDATA, tip string) {

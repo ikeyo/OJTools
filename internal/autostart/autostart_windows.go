@@ -4,9 +4,9 @@ package autostart
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
+
+	"golang.org/x/sys/windows/registry"
 )
 
 const (
@@ -19,32 +19,20 @@ func Command(exePath string) string {
 }
 
 func CurrentValue() (string, error) {
-	cmd := exec.Command("reg", "query", RunKey, "/v", Name)
-	out, err := cmd.CombinedOutput()
+	key, err := registry.OpenKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Run`, registry.QUERY_VALUE)
 	if err != nil {
-		// `reg query` exits non-zero when the value is missing.
-		if len(out) == 0 || strings.Contains(strings.ToLower(string(out)), "unable to find") {
-			return "", nil
-		}
 		return "", err
 	}
+	defer key.Close()
 
-	text := string(out)
-	for _, line := range strings.Split(text, "\n") {
-		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, Name) {
-			continue
-		}
-
-		fields := strings.Fields(line)
-		if len(fields) < 3 {
-			continue
-		}
-
-		return strings.Join(fields[2:], " "), nil
+	value, _, err := key.GetStringValue(Name)
+	if err == registry.ErrNotExist {
+		return "", nil
 	}
-
-	return "", nil
+	if err != nil {
+		return "", err
+	}
+	return value, nil
 }
 
 func IsEnabled() (bool, error) {
@@ -65,27 +53,28 @@ func EnableCurrentExecutable() error {
 
 func Enable(exePath string) error {
 	cleanPath := filepath.Clean(exePath)
-	cmd := exec.Command(
-		"reg",
-		"add",
-		RunKey,
-		"/v", Name,
-		"/t", "REG_SZ",
-		"/d", Command(cleanPath),
-		"/f",
-	)
-	return cmd.Run()
+	key, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Run`, registry.SET_VALUE)
+	if err != nil {
+		return err
+	}
+	defer key.Close()
+
+	return key.SetStringValue(Name, Command(cleanPath))
 }
 
 func Disable() error {
-	cmd := exec.Command("reg", "delete", RunKey, "/v", Name, "/f")
-	out, err := cmd.CombinedOutput()
+	key, err := registry.OpenKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Run`, registry.SET_VALUE)
+	if err == registry.ErrNotExist {
+		return nil
+	}
 	if err != nil {
-		text := strings.ToLower(string(out))
-		if strings.Contains(text, "unable to find") {
-			return nil
-		}
 		return err
 	}
-	return nil
+	defer key.Close()
+
+	if err := key.DeleteValue(Name); err == registry.ErrNotExist {
+		return nil
+	} else {
+		return err
+	}
 }

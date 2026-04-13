@@ -91,3 +91,10 @@ func (c Config) Get(pairKey string) (PairCalibration, bool) {
 	cal, ok := c.Calibrations[pairKey]
 	return cal, ok
 }
+
+func (c *Config) Delete(pairKey string) {
+	if c.Calibrations == nil {
+		return
+	}
+	delete(c.Calibrations, pairKey)
+}
