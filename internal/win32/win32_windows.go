@@ -83,6 +83,14 @@ type MSLLHOOKSTRUCT struct {
 	DwExtraInfo uintptr
 }
 
+type KBDLLHOOKSTRUCT struct {
+	VkCode      uint32
+	ScanCode    uint32
+	Flags       uint32
+	Time        uint32
+	DwExtraInfo uintptr
+}
+
 type WINDOWPLACEMENT struct {
 	Length           uint32
 	Flags            uint32
@@ -115,6 +123,7 @@ const (
 	MONITOR_DEFAULTTONEAREST = 0x00000002
 
 	MONITOR_DPI_TYPE_EFFECTIVE = 0
+	DWMWA_EXTENDED_FRAME_BOUNDS = 9
 
 	CS_VREDRAW = 0x0001
 	CS_HREDRAW = 0x0002
@@ -129,8 +138,13 @@ const (
 	WS_EX_NOACTIVATE  = 0x08000000
 
 	SW_HIDE           = 0
+	SW_SHOWNORMAL     = 1
+	SW_SHOWMINIMIZED  = 2
+	SW_SHOWMAXIMIZED  = 3
 	SW_SHOWNOACTIVATE = 4
 	SW_SHOW           = 5
+	SW_MINIMIZE       = 6
+	SW_RESTORE        = 9
 
 	WM_CLOSE         = 0x0010
 	WM_COMMAND       = 0x0111
@@ -139,6 +153,9 @@ const (
 	WM_NCHITTEST     = 0x0084
 	WM_PAINT         = 0x000F
 	WM_KEYDOWN       = 0x0100
+	WM_KEYUP         = 0x0101
+	WM_SYSKEYDOWN    = 0x0104
+	WM_SYSKEYUP      = 0x0105
 	WM_APP           = 0x8000
 	WM_MOUSEMOVE     = 0x0200
 	WM_LBUTTONDOWN   = 0x0201
@@ -148,6 +165,7 @@ const (
 	WM_TIMER         = 0x0113
 	WM_MOUSEWHEEL    = 0x020A
 
+	WH_KEYBOARD_LL = 13
 	WH_MOUSE_LL = 14
 	HC_ACTION   = 0
 
@@ -156,6 +174,9 @@ const (
 	IDC_ARROW       = 32512
 	IDI_APPLICATION = 32512
 
+	VK_SHIFT    = 0x10
+	VK_CONTROL  = 0x11
+	VK_MENU     = 0x12
 	VK_ESCAPE    = 0x1B
 	VK_RETURN    = 0x0D
 	VK_UP        = 0x26
@@ -163,6 +184,13 @@ const (
 	VK_LEFT      = 0x25
 	VK_RIGHT     = 0x27
 	VK_ADD       = 0x6B
+	VK_K         = 0x4B
+	VK_LSHIFT    = 0xA0
+	VK_RSHIFT    = 0xA1
+	VK_LCONTROL  = 0xA2
+	VK_RCONTROL  = 0xA3
+	VK_LMENU     = 0xA4
+	VK_RMENU     = 0xA5
 	VK_SUBTRACT  = 0x6D
 	VK_OEM_PLUS  = 0xBB
 	VK_OEM_MINUS = 0xBD
@@ -237,6 +265,7 @@ var (
 	procGetWindowThreadProcessId      = user32.NewProc("GetWindowThreadProcessId")
 	procInvalidateRect                = user32.NewProc("InvalidateRect")
 	procIsWindowVisible               = user32.NewProc("IsWindowVisible")
+	procIsWindowArranged              = user32.NewProc("IsWindowArranged")
 	procAppendMenuW                   = user32.NewProc("AppendMenuW")
 	procCreatePopupMenu               = user32.NewProc("CreatePopupMenu")
 	procLoadIconW                     = user32.NewProc("LoadIconW")
@@ -286,6 +315,9 @@ var (
 	shell32              = syscall.NewLazyDLL("shell32.dll")
 	procShellNotifyIconW = shell32.NewProc("Shell_NotifyIconW")
 	procExtractIconExW   = shell32.NewProc("ExtractIconExW")
+
+	dwmapi                    = syscall.NewLazyDLL("dwmapi.dll")
+	procDwmGetWindowAttribute = dwmapi.NewProc("DwmGetWindowAttribute")
 )
 
 func (r RECT) Width() int32 {
@@ -398,6 +430,14 @@ func GetMonitorInfo(handle HMONITOR, info *MONITORINFOEX) error {
 
 func IsWindowVisible(hwnd HWND) bool {
 	r1, _, _ := procIsWindowVisible.Call(uintptr(hwnd))
+	return r1 != 0
+}
+
+func IsWindowArranged(hwnd HWND) bool {
+	if err := procIsWindowArranged.Find(); err != nil {
+		return false
+	}
+	r1, _, _ := procIsWindowArranged.Call(uintptr(hwnd))
 	return r1 != 0
 }
 
@@ -588,6 +628,22 @@ func GetWindowRect(hwnd HWND, rect *RECT) error {
 	r1, _, err := procGetWindowRect.Call(uintptr(hwnd), uintptr(unsafe.Pointer(rect)))
 	if r1 == 0 {
 		return err
+	}
+	return nil
+}
+
+func DwmGetExtendedFrameBounds(hwnd HWND, rect *RECT) error {
+	if err := procDwmGetWindowAttribute.Find(); err != nil {
+		return err
+	}
+	hr, _, _ := procDwmGetWindowAttribute.Call(
+		uintptr(hwnd),
+		uintptr(DWMWA_EXTENDED_FRAME_BOUNDS),
+		uintptr(unsafe.Pointer(rect)),
+		unsafe.Sizeof(*rect),
+	)
+	if hr != 0 {
+		return fmt.Errorf("DwmGetWindowAttribute failed: 0x%x", hr)
 	}
 	return nil
 }

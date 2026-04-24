@@ -26,6 +26,8 @@ The overlay and remap logic both use the actual monitor bounds reported by Windo
 - Tray icon runtime service
 - Pause and resume from the tray
 - Reset DPI calibration from the tray
+- Keyboard lock toggle with `Ctrl+Alt+Shift+K`
+- Select and block one specific key from the tray
 - Windows auto-start toggle
 - Save and restore desktop window layout
 - Shake-to-find-cursor highlight with configurable delay
@@ -42,6 +44,7 @@ This project is aimed at Windows users who work across two monitors and want cur
 - Assumes the primary working pair is arranged horizontally
 - Focused on one selected pair rather than a complex multi-monitor matrix
 - Configuration is file-based and local to the executable or working directory
+- Keyboard blocking is based on Windows virtual-key codes, so it is intentionally broad and not app-specific
 - Window layout restore uses saved virtual desktop coordinates, so it works across multiple monitors when the monitor arrangement remains compatible, but it does not yet re-home windows based on changed monitor identity or a drastically different layout
 - There is no in-app Git commit or push workflow; publishing source changes still happens through an external Git workflow
 

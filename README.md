@@ -14,6 +14,7 @@ The project focuses on a common annoyance: the mouse pointer lands too high or t
 - Supports Windows auto-start from the current user registry
 - Can save and restore the current desktop window layout
 - Includes a shake-to-find-cursor highlight with configurable delay
+- Can lock the keyboard or block one selected key from the tray
 
 ## How Calibration Works
 
@@ -78,6 +79,11 @@ When `run` is active, right-click the tray icon to access:
 - `Cursor Calibration...`
 - `Reset DPI Calibration`
 - `Pause Cursor Remap`
+- `Lock Keyboard (Ctrl+Alt+Shift+K)`
+- `Blocked Key: ...`
+- `Block Specific Key`
+- `Set Blocked Key (Next Press)`
+- `Clear Blocked Key`
 - `Auto-Start`
 - `Restore Layout On Launch`
 - `Shake To Find Cursor`
@@ -93,7 +99,7 @@ Double-clicking the tray icon opens calibration directly.
 
 ## Configuration Files
 
-- `config.json`: saved cursor calibration and feature settings
+- `config.json`: saved cursor calibration and feature settings, including the blocked-key setting
 - `window-layout.json`: saved desktop window placement snapshot
 
 Both files are written next to the built executable, or to the current working directory when using `go run`.
@@ -104,7 +110,8 @@ Both files are written next to the built executable, or to the current working d
 - Auto-start uses `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` and launches `OJTools.exe run`.
 - Saving a window layout stores the Windows virtual desktop placement for each captured window, so multi-monitor layouts can be restored as long as the monitor arrangement stays compatible.
 - If monitor count, primary monitor, scaling, or relative placement changes significantly after saving, some restored windows can land on a different monitor or off-screen because layout restore currently saves window placement coordinates, not per-monitor attachment metadata.
-- Tray checkmarks reflect paused remap state, auto-start state, restore-on-launch state, and shake highlight state.
+- Tray checkmarks reflect paused remap state, keyboard lock state, blocked-key state, auto-start state, restore-on-launch state, and shake highlight state.
+- Keyboard lock blocks key input until toggled off with `Ctrl+Alt+Shift+K` or the tray menu. The blocked-key feature only suppresses the selected virtual key.
 - The shake highlight stays suppressed while a fullscreen foreground app is active.
 - The first run can start from the Windows DPI ratio, then be refined manually with the ruler overlay.
 - OJTools itself does not include an in-app Git commit or push feature. Source changes are still published through a normal Git workflow outside the tray UI.
@@ -113,7 +120,7 @@ Both files are written next to the built executable, or to the current working d
 
 - `cmd/ojtools`: application entry point
 - `internal/overlay`: calibration overlay UI
-- `internal/remap`: runtime cursor remap service and tray menu
+- `internal/remap`: runtime cursor remap service, tray menu, keyboard lock, blocked-key handling, and layout actions
 - `internal/layout`: window layout snapshot and restore support
 - `internal/highlight`: shake-to-find-cursor highlight overlay
 - `internal/monitor`: monitor enumeration and pair selection

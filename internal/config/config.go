@@ -22,8 +22,10 @@ type PairCalibration struct {
 }
 
 type Features struct {
-	ShakeCursorHighlight  bool `json:"shakeCursorHighlight"`
-	ShakeHighlightDelayMs int  `json:"shakeHighlightDelayMs"`
+	ShakeCursorHighlight  bool   `json:"shakeCursorHighlight"`
+	ShakeHighlightDelayMs int    `json:"shakeHighlightDelayMs"`
+	BlockedKeyEnabled     bool   `json:"blockedKeyEnabled"`
+	BlockedVK             uint32 `json:"blockedVK"`
 }
 
 type Config struct {
@@ -39,6 +41,8 @@ func Default() Config {
 		Features: Features{
 			ShakeCursorHighlight:  true,
 			ShakeHighlightDelayMs: 500,
+			BlockedKeyEnabled:     false,
+			BlockedVK:             0,
 		},
 	}
 }
