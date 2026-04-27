@@ -23,29 +23,42 @@ var (
 )
 
 const (
-	trayClassName                = "OJToolsTrayWindow"
-	trayCallbackMessage          = win32.WM_APP + 1
-	trayIconID                   = 1
-	trayCalibrationCommand       = 997
-	trayResetCalibrationCommand  = 998
-	trayPauseCommand             = 999
-	trayAutoStartCommand         = 1000
-	trayRestoreOnLaunchCommand   = 1001
-	trayShakeHighlightCommand    = 1002
-	trayShakeDelay500Command     = 1003
-	trayShakeDelay1000Command    = 1004
-	trayShakeDelay2000Command    = 1005
-	traySaveLayoutCommand        = 1006
-	trayRestoreLayoutCommand     = 1007
-	trayClearLayoutCommand       = 1008
-	trayOpenConfigCommand        = 1009
-	trayAboutCommand             = 1010
-	trayExitCommand              = 1011
-	trayLockKeyboardCommand      = 1012
-	trayBlockedKeyStatusCommand  = 1013
-	trayToggleBlockedKeyCommand  = 1014
-	trayCaptureBlockedKeyCommand = 1015
-	trayClearBlockedKeyCommand   = 1016
+	trayClassName                   = "OJToolsTrayWindow"
+	trayCallbackMessage             = win32.WM_APP + 1
+	trayIconID                      = 1
+	trayCalibrationCommand          = 997
+	trayResetCalibrationCommand     = 998
+	trayPauseCommand                = 999
+	trayAutoStartCommand            = 1000
+	trayRestoreOnLaunchCommand      = 1001
+	trayShakeHighlightCommand       = 1002
+	trayShakeDelay500Command        = 1003
+	trayShakeDelay1000Command       = 1004
+	trayShakeDelay2000Command       = 1005
+	traySaveLayoutCommand           = 1006
+	trayRestoreLayoutCommand        = 1007
+	trayClearLayoutCommand          = 1008
+	trayOpenConfigCommand           = 1009
+	trayAboutCommand                = 1010
+	trayExitCommand                 = 1011
+	trayLockKeyboardCommand         = 1012
+	trayBlockedKeyStatusCommand     = 1013
+	trayToggleBlockedKeyCommand     = 1014
+	trayCaptureBlockedKeyCommand    = 1015
+	trayClearBlockedKeyCommand      = 1016
+	trayTrailColorMintCommand       = 1017
+	trayTrailColorYellowCommand     = 1018
+	trayTrailColorPinkCommand       = 1019
+	trayTrailColorCyanCommand       = 1020
+	trayTrailThicknessThinCommand   = 1021
+	trayTrailThicknessNormalCommand = 1022
+	trayTrailThicknessThickCommand  = 1023
+	trayTrailLengthShortCommand     = 1024
+	trayTrailLengthNormalCommand    = 1025
+	trayTrailLengthLongCommand      = 1026
+	trayTrailFadeFastCommand        = 1027
+	trayTrailFadeNormalCommand      = 1028
+	trayTrailFadeSlowCommand        = 1029
 
 	shakeWindow        = 750 * time.Millisecond
 	shakeMinSegment    = 10.0
@@ -116,7 +129,7 @@ func Run(pair monitor.Pair, transform config.Transform, cfgPath string, cfg conf
 	}
 	defer service.removeTray()
 
-	manager, err := highlight.New(instance)
+	manager, err := highlight.New(instance, highlightSettingsFromFeatures(service.Config.Features))
 	if err == nil {
 		service.Highlight = manager
 		defer manager.Close()

@@ -18,6 +18,7 @@ type HBRUSH HANDLE
 type HCURSOR HANDLE
 type HICON HANDLE
 type HGDIOBJ HANDLE
+type HBITMAP HANDLE
 type HMENU HANDLE
 type COLORREF uint32
 
@@ -31,6 +32,11 @@ type RECT struct {
 type POINT struct {
 	X int32
 	Y int32
+}
+
+type SIZE struct {
+	CX int32
+	CY int32
 }
 
 type MONITORINFOEX struct {
@@ -118,11 +124,51 @@ type NOTIFYICONDATA struct {
 	HBalloonIcon      HICON
 }
 
+type BLENDFUNCTION struct {
+	BlendOp             byte
+	BlendFlags          byte
+	SourceConstantAlpha byte
+	AlphaFormat         byte
+}
+
+type BITMAPINFOHEADER struct {
+	Size          uint32
+	Width         int32
+	Height        int32
+	Planes        uint16
+	BitCount      uint16
+	Compression   uint32
+	SizeImage     uint32
+	XPelsPerMeter int32
+	YPelsPerMeter int32
+	ClrUsed       uint32
+	ClrImportant  uint32
+}
+
+type RGBQUAD struct {
+	Blue     byte
+	Green    byte
+	Red      byte
+	Reserved byte
+}
+
+type BITMAPINFO struct {
+	Header BITMAPINFOHEADER
+	Colors [1]RGBQUAD
+}
+
+type GDIPlusStartupInput struct {
+	GDIPlusVersion           uint32
+	DebugEventCallback       uintptr
+	SuppressBackgroundThread int32
+	SuppressExternalCodecs   int32
+}
+
 const (
 	MONITORINFOF_PRIMARY     = 0x00000001
 	MONITOR_DEFAULTTONEAREST = 0x00000002
 
-	MONITOR_DPI_TYPE_EFFECTIVE = 0
+	MONITOR_DPI_TYPE_EFFECTIVE  = 0
 	DWMWA_EXTENDED_FRAME_BOUNDS = 9
 
 	CS_VREDRAW = 0x0001
@@ -166,17 +212,17 @@ const (
 	WM_MOUSEWHEEL    = 0x020A
 
 	WH_KEYBOARD_LL = 13
-	WH_MOUSE_LL = 14
-	HC_ACTION   = 0
+	WH_MOUSE_LL    = 14
+	HC_ACTION      = 0
 
 	LLMHF_INJECTED = 0x00000001
 
 	IDC_ARROW       = 32512
 	IDI_APPLICATION = 32512
 
-	VK_SHIFT    = 0x10
-	VK_CONTROL  = 0x11
-	VK_MENU     = 0x12
+	VK_SHIFT     = 0x10
+	VK_CONTROL   = 0x11
+	VK_MENU      = 0x12
 	VK_ESCAPE    = 0x1B
 	VK_RETURN    = 0x0D
 	VK_UP        = 0x26
@@ -203,6 +249,7 @@ const (
 	MF_GRAYED    = 0x00000001
 	MF_DISABLED  = 0x00000002
 	MF_CHECKED   = 0x00000008
+	MF_POPUP     = 0x00000010
 	MF_SEPARATOR = 0x00000800
 
 	TPM_RIGHTBUTTON = 0x0002
@@ -211,8 +258,13 @@ const (
 	BKMODE_TRANSPARENT = 1
 	PS_SOLID           = 0
 	NULL_BRUSH         = 5
+	BI_RGB             = 0
+	DIB_RGB_COLORS     = 0
 
 	LWA_COLORKEY = 0x00000001
+	ULW_ALPHA    = 0x00000002
+	AC_SRC_OVER  = 0x00
+	AC_SRC_ALPHA = 0x01
 
 	MB_OK = 0x00000000
 
@@ -288,20 +340,25 @@ var (
 	procTranslateMessage              = user32.NewProc("TranslateMessage")
 	procUnhookWindowsHookEx           = user32.NewProc("UnhookWindowsHookEx")
 	procUpdateWindow                  = user32.NewProc("UpdateWindow")
+	procUpdateLayeredWindow           = user32.NewProc("UpdateLayeredWindow")
 	procKillTimer                     = user32.NewProc("KillTimer")
 
-	procCreatePen        = gdi32.NewProc("CreatePen")
-	procCreateSolidBrush = gdi32.NewProc("CreateSolidBrush")
-	procDeleteObject     = gdi32.NewProc("DeleteObject")
-	procEllipse          = gdi32.NewProc("Ellipse")
-	procFillRect         = user32.NewProc("FillRect")
-	procGetStockObject   = gdi32.NewProc("GetStockObject")
-	procLineTo           = gdi32.NewProc("LineTo")
-	procMoveToEx         = gdi32.NewProc("MoveToEx")
-	procSelectObject     = gdi32.NewProc("SelectObject")
-	procSetBkMode        = gdi32.NewProc("SetBkMode")
-	procSetTextColor     = gdi32.NewProc("SetTextColor")
-	procTextOutW         = gdi32.NewProc("TextOutW")
+	procCreateCompatibleDC = gdi32.NewProc("CreateCompatibleDC")
+	procCreateDIBSection   = gdi32.NewProc("CreateDIBSection")
+	procCreatePen          = gdi32.NewProc("CreatePen")
+	procCreateSolidBrush   = gdi32.NewProc("CreateSolidBrush")
+	procDeleteDC           = gdi32.NewProc("DeleteDC")
+	procDeleteObject       = gdi32.NewProc("DeleteObject")
+	procEllipse            = gdi32.NewProc("Ellipse")
+	procFillRect           = user32.NewProc("FillRect")
+	procGetStockObject     = gdi32.NewProc("GetStockObject")
+	procLineTo             = gdi32.NewProc("LineTo")
+	procMoveToEx           = gdi32.NewProc("MoveToEx")
+	procPolygon            = gdi32.NewProc("Polygon")
+	procSelectObject       = gdi32.NewProc("SelectObject")
+	procSetBkMode          = gdi32.NewProc("SetBkMode")
+	procSetTextColor       = gdi32.NewProc("SetTextColor")
+	procTextOutW           = gdi32.NewProc("TextOutW")
 
 	procGetModuleHandleW           = kernel32.NewProc("GetModuleHandleW")
 	procGetConsoleWindow           = kernel32.NewProc("GetConsoleWindow")
@@ -318,6 +375,18 @@ var (
 
 	dwmapi                    = syscall.NewLazyDLL("dwmapi.dll")
 	procDwmGetWindowAttribute = dwmapi.NewProc("DwmGetWindowAttribute")
+
+	gdiplus                  = syscall.NewLazyDLL("gdiplus.dll")
+	procGdiplusStartup       = gdiplus.NewProc("GdiplusStartup")
+	procGdiplusShutdown      = gdiplus.NewProc("GdiplusShutdown")
+	procGdipCreateFromHDC    = gdiplus.NewProc("GdipCreateFromHDC")
+	procGdipDeleteGraphics   = gdiplus.NewProc("GdipDeleteGraphics")
+	procGdipSetSmoothingMode = gdiplus.NewProc("GdipSetSmoothingMode")
+	procGdipGraphicsClear    = gdiplus.NewProc("GdipGraphicsClear")
+	procGdipCreateSolidFill  = gdiplus.NewProc("GdipCreateSolidFill")
+	procGdipDeleteBrush      = gdiplus.NewProc("GdipDeleteBrush")
+	procGdipFillPolygonI     = gdiplus.NewProc("GdipFillPolygonI")
+	procGdipFillEllipseI     = gdiplus.NewProc("GdipFillEllipseI")
 )
 
 func (r RECT) Width() int32 {
@@ -676,6 +745,45 @@ func CreatePen(style uint32, width int32, color COLORREF) (HGDIOBJ, error) {
 	return HGDIOBJ(r1), nil
 }
 
+func CreateCompatibleDC(hdc HDC) (HDC, error) {
+	r1, _, err := procCreateCompatibleDC.Call(uintptr(hdc))
+	if r1 == 0 {
+		return 0, err
+	}
+	return HDC(r1), nil
+}
+
+func DeleteDC(hdc HDC) {
+	procDeleteDC.Call(uintptr(hdc))
+}
+
+func CreateDIBSection(width, height int32) (HBITMAP, unsafe.Pointer, error) {
+	info := BITMAPINFO{
+		Header: BITMAPINFOHEADER{
+			Size:        uint32(unsafe.Sizeof(BITMAPINFOHEADER{})),
+			Width:       width,
+			Height:      -height,
+			Planes:      1,
+			BitCount:    32,
+			Compression: BI_RGB,
+		},
+	}
+
+	var bits unsafe.Pointer
+	r1, _, err := procCreateDIBSection.Call(
+		0,
+		uintptr(unsafe.Pointer(&info)),
+		uintptr(DIB_RGB_COLORS),
+		uintptr(unsafe.Pointer(&bits)),
+		0,
+		0,
+	)
+	if r1 == 0 {
+		return 0, nil, err
+	}
+	return HBITMAP(r1), bits, nil
+}
+
 func FillRect(hdc HDC, rect *RECT, brush HBRUSH) error {
 	r1, _, err := procFillRect.Call(uintptr(hdc), uintptr(unsafe.Pointer(rect)), uintptr(brush))
 	if r1 == 0 {
@@ -731,6 +839,118 @@ func LineTo(hdc HDC, x, y int32) {
 
 func Ellipse(hdc HDC, left, top, right, bottom int32) {
 	procEllipse.Call(uintptr(hdc), uintptr(left), uintptr(top), uintptr(right), uintptr(bottom))
+}
+
+func Polygon(hdc HDC, points []POINT) error {
+	if len(points) == 0 {
+		return nil
+	}
+	r1, _, err := procPolygon.Call(
+		uintptr(hdc),
+		uintptr(unsafe.Pointer(&points[0])),
+		uintptr(len(points)),
+	)
+	if r1 == 0 {
+		return err
+	}
+	return nil
+}
+
+func GDIPlusStartup() (uintptr, error) {
+	input := GDIPlusStartupInput{GDIPlusVersion: 1}
+	var token uintptr
+	status, _, err := procGdiplusStartup.Call(
+		uintptr(unsafe.Pointer(&token)),
+		uintptr(unsafe.Pointer(&input)),
+		0,
+	)
+	if status != 0 {
+		return 0, err
+	}
+	return token, nil
+}
+
+func GDIPlusShutdown(token uintptr) {
+	if token != 0 {
+		procGdiplusShutdown.Call(token)
+	}
+}
+
+func GDIPlusFillPolygon(hdc HDC, points []POINT, argb uint32) error {
+	if len(points) < 3 {
+		return nil
+	}
+
+	graphics, err := GDIPlusGraphicsFromHDC(hdc)
+	if err != nil {
+		return err
+	}
+	defer procGdipDeleteGraphics.Call(graphics)
+
+	brush, err := GDIPlusSolidBrush(argb)
+	if err != nil {
+		return err
+	}
+	defer procGdipDeleteBrush.Call(brush)
+
+	status, _, err := procGdipFillPolygonI.Call(
+		graphics,
+		brush,
+		uintptr(unsafe.Pointer(&points[0])),
+		uintptr(len(points)),
+		0,
+	)
+	if status != 0 {
+		return err
+	}
+	return nil
+}
+
+func GDIPlusFillEllipse(hdc HDC, x, y, width, height int32, argb uint32) error {
+	graphics, err := GDIPlusGraphicsFromHDC(hdc)
+	if err != nil {
+		return err
+	}
+	defer procGdipDeleteGraphics.Call(graphics)
+
+	brush, err := GDIPlusSolidBrush(argb)
+	if err != nil {
+		return err
+	}
+	defer procGdipDeleteBrush.Call(brush)
+
+	status, _, err := procGdipFillEllipseI.Call(
+		graphics,
+		brush,
+		uintptr(x),
+		uintptr(y),
+		uintptr(width),
+		uintptr(height),
+	)
+	if status != 0 {
+		return err
+	}
+	return nil
+}
+
+func GDIPlusGraphicsFromHDC(hdc HDC) (uintptr, error) {
+	var graphics uintptr
+	status, _, err := procGdipCreateFromHDC.Call(uintptr(hdc), uintptr(unsafe.Pointer(&graphics)))
+	if status != 0 {
+		return 0, err
+	}
+	// SmoothingModeAntiAlias = 4 in GDI+.
+	procGdipSetSmoothingMode.Call(graphics, 4)
+	return graphics, nil
+}
+
+func GDIPlusSolidBrush(argb uint32) (uintptr, error) {
+	var brush uintptr
+	status, _, err := procGdipCreateSolidFill.Call(uintptr(argb), uintptr(unsafe.Pointer(&brush)))
+	if status != 0 {
+		return 0, err
+	}
+	return brush, nil
 }
 
 func SetCapture(hwnd HWND) {
@@ -802,6 +1022,33 @@ func SetForegroundWindow(hwnd HWND) {
 
 func SetLayeredWindowAttributes(hwnd HWND, colorKey COLORREF, alpha byte, flags uint32) error {
 	r1, _, err := procSetLayeredWindowAttributes.Call(uintptr(hwnd), uintptr(colorKey), uintptr(alpha), uintptr(flags))
+	if r1 == 0 {
+		return err
+	}
+	return nil
+}
+
+func UpdateLayeredWindowAlpha(hwnd HWND, x, y, width, height int32, src HDC) error {
+	dstPos := POINT{X: x, Y: y}
+	size := SIZE{CX: width, CY: height}
+	srcPos := POINT{}
+	blend := BLENDFUNCTION{
+		BlendOp:             AC_SRC_OVER,
+		SourceConstantAlpha: 255,
+		AlphaFormat:         AC_SRC_ALPHA,
+	}
+
+	r1, _, err := procUpdateLayeredWindow.Call(
+		uintptr(hwnd),
+		0,
+		uintptr(unsafe.Pointer(&dstPos)),
+		uintptr(unsafe.Pointer(&size)),
+		uintptr(src),
+		uintptr(unsafe.Pointer(&srcPos)),
+		0,
+		uintptr(unsafe.Pointer(&blend)),
+		uintptr(ULW_ALPHA),
+	)
 	if r1 == 0 {
 		return err
 	}

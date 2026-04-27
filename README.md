@@ -14,6 +14,7 @@ The project focuses on a common annoyance: the mouse pointer lands too high or t
 - Supports Windows auto-start from the current user registry
 - Can save and restore the current desktop window layout
 - Includes a shake-to-find-cursor highlight with configurable delay
+- Provides a configurable fluorescent cursor trail for shake-to-find mode
 - Can lock the keyboard or block one selected key from the tray
 
 ## How Calibration Works
@@ -88,6 +89,7 @@ When `run` is active, right-click the tray icon to access:
 - `Restore Layout On Launch`
 - `Shake To Find Cursor`
 - `Shake Delay: 0.5 s / 1 s / 2 s`
+- `Trail Effect`
 - `Save Window Layout`
 - `Restore Window Layout`
 - `Clear Saved Window Layout`
@@ -113,6 +115,7 @@ Both files are written next to the built executable, or to the current working d
 - Tray checkmarks reflect paused remap state, keyboard lock state, blocked-key state, auto-start state, restore-on-launch state, and shake highlight state.
 - Keyboard lock blocks key input until toggled off with `Ctrl+Alt+Shift+K` or the tray menu. The blocked-key feature only suppresses the selected virtual key.
 - The shake highlight stays suppressed while a fullscreen foreground app is active.
+- The cursor trail effect supports grouped tray settings for color, thickness, length, and shrink time. Its overlay resizes to the active trail bounds and renders segment-by-segment to reduce clipping and artifacts during fast cursor movement.
 - The first run can start from the Windows DPI ratio, then be refined manually with the ruler overlay.
 - OJTools itself does not include an in-app Git commit or push feature. Source changes are still published through a normal Git workflow outside the tray UI.
 

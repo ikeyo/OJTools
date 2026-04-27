@@ -31,6 +31,7 @@ The overlay and remap logic both use the actual monitor bounds reported by Windo
 - Windows auto-start toggle
 - Save and restore desktop window layout
 - Shake-to-find-cursor highlight with configurable delay
+- Configurable fluorescent cursor trail with color, thickness, length, and shrink-time tray settings
 - Fullscreen-aware shake highlight suppression
 - Windows GUI build with embedded app icon
 
@@ -46,6 +47,7 @@ This project is aimed at Windows users who work across two monitors and want cur
 - Configuration is file-based and local to the executable or working directory
 - Keyboard blocking is based on Windows virtual-key codes, so it is intentionally broad and not app-specific
 - Window layout restore uses saved virtual desktop coordinates, so it works across multiple monitors when the monitor arrangement remains compatible, but it does not yet re-home windows based on changed monitor identity or a drastically different layout
+- The cursor trail is rendered by OJTools itself rather than by an external effects library, so future visual styles still require local renderer changes
 - There is no in-app Git commit or push workflow; publishing source changes still happens through an external Git workflow
 
 ## Repository Purpose

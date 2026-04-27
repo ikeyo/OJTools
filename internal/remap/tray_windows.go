@@ -107,6 +107,19 @@ func (s *Service) showTrayMenu(hwnd win32.HWND) uintptr {
 	if err := appendMenuSeparator(menu); err != nil {
 		return 0
 	}
+
+	trailMenu, err := s.createTrailEffectMenu()
+	if err != nil {
+		return 0
+	}
+	if err := appendSubMenu(menu, trailMenu, "Trail Effect"); err != nil {
+		win32.DestroyMenu(trailMenu)
+		return 0
+	}
+	trailMenu = 0
+	if err := appendMenuSeparator(menu); err != nil {
+		return 0
+	}
 	if err := appendMenuItem(menu, traySaveLayoutCommand, "Save Window Layout", false, false); err != nil {
 		return 0
 	}
@@ -185,6 +198,32 @@ func (s *Service) showTrayMenu(hwnd win32.HWND) uintptr {
 	case trayShakeDelay2000Command:
 		s.Config.Features.ShakeHighlightDelayMs = 2000
 		_ = saveAppConfig(s.ConfigPath, s.Config)
+	case trayTrailColorMintCommand:
+		s.setTrailColor(trailColorMint)
+	case trayTrailColorYellowCommand:
+		s.setTrailColor(trailColorYellow)
+	case trayTrailColorPinkCommand:
+		s.setTrailColor(trailColorPink)
+	case trayTrailColorCyanCommand:
+		s.setTrailColor(trailColorCyan)
+	case trayTrailThicknessThinCommand:
+		s.setTrailThickness(8)
+	case trayTrailThicknessNormalCommand:
+		s.setTrailThickness(13)
+	case trayTrailThicknessThickCommand:
+		s.setTrailThickness(20)
+	case trayTrailLengthShortCommand:
+		s.setTrailLength(280)
+	case trayTrailLengthNormalCommand:
+		s.setTrailLength(840)
+	case trayTrailLengthLongCommand:
+		s.setTrailLength(1680)
+	case trayTrailFadeFastCommand:
+		s.setTrailFadeMs(160)
+	case trayTrailFadeNormalCommand:
+		s.setTrailFadeMs(260)
+	case trayTrailFadeSlowCommand:
+		s.setTrailFadeMs(520)
 	case traySaveLayoutCommand:
 		go saveWindowLayout()
 	case trayRestoreLayoutCommand:
@@ -204,6 +243,147 @@ func (s *Service) showTrayMenu(hwnd win32.HWND) uintptr {
 	}
 
 	return 0
+}
+
+func (s *Service) createTrailEffectMenu() (win32.HMENU, error) {
+	menu, err := win32.CreatePopupMenu()
+	if err != nil {
+		return 0, err
+	}
+
+	colorMenu, err := s.createTrailColorMenu()
+	if err != nil {
+		win32.DestroyMenu(menu)
+		return 0, err
+	}
+	if err := appendSubMenu(menu, colorMenu, "Color"); err != nil {
+		win32.DestroyMenu(colorMenu)
+		win32.DestroyMenu(menu)
+		return 0, err
+	}
+
+	thicknessMenu, err := s.createTrailThicknessMenu()
+	if err != nil {
+		win32.DestroyMenu(menu)
+		return 0, err
+	}
+	if err := appendSubMenu(menu, thicknessMenu, "Thickness"); err != nil {
+		win32.DestroyMenu(thicknessMenu)
+		win32.DestroyMenu(menu)
+		return 0, err
+	}
+
+	lengthMenu, err := s.createTrailLengthMenu()
+	if err != nil {
+		win32.DestroyMenu(menu)
+		return 0, err
+	}
+	if err := appendSubMenu(menu, lengthMenu, "Length"); err != nil {
+		win32.DestroyMenu(lengthMenu)
+		win32.DestroyMenu(menu)
+		return 0, err
+	}
+
+	fadeMenu, err := s.createTrailFadeMenu()
+	if err != nil {
+		win32.DestroyMenu(menu)
+		return 0, err
+	}
+	if err := appendSubMenu(menu, fadeMenu, "Shrink Time"); err != nil {
+		win32.DestroyMenu(fadeMenu)
+		win32.DestroyMenu(menu)
+		return 0, err
+	}
+
+	return menu, nil
+}
+
+func (s *Service) createTrailColorMenu() (win32.HMENU, error) {
+	menu, err := win32.CreatePopupMenu()
+	if err != nil {
+		return 0, err
+	}
+	trailColor := normalizeTrailColor(s.Config.Features.ShakeTrailColor)
+	if err := appendMenuItem(menu, trayTrailColorMintCommand, "Color: Mint", trailColor == trailColorMint, false); err != nil {
+		win32.DestroyMenu(menu)
+		return 0, err
+	}
+	if err := appendMenuItem(menu, trayTrailColorYellowCommand, "Color: Yellow", trailColor == trailColorYellow, false); err != nil {
+		win32.DestroyMenu(menu)
+		return 0, err
+	}
+	if err := appendMenuItem(menu, trayTrailColorPinkCommand, "Color: Pink", trailColor == trailColorPink, false); err != nil {
+		win32.DestroyMenu(menu)
+		return 0, err
+	}
+	if err := appendMenuItem(menu, trayTrailColorCyanCommand, "Color: Cyan", trailColor == trailColorCyan, false); err != nil {
+		win32.DestroyMenu(menu)
+		return 0, err
+	}
+	return menu, nil
+}
+
+func (s *Service) createTrailThicknessMenu() (win32.HMENU, error) {
+	menu, err := win32.CreatePopupMenu()
+	if err != nil {
+		return 0, err
+	}
+	thickness := normalizeTrailThickness(s.Config.Features.ShakeTrailThickness)
+	if err := appendMenuItem(menu, trayTrailThicknessThinCommand, "Thickness: Thin", thickness == 8, false); err != nil {
+		win32.DestroyMenu(menu)
+		return 0, err
+	}
+	if err := appendMenuItem(menu, trayTrailThicknessNormalCommand, "Thickness: Normal", thickness == 13, false); err != nil {
+		win32.DestroyMenu(menu)
+		return 0, err
+	}
+	if err := appendMenuItem(menu, trayTrailThicknessThickCommand, "Thickness: Thick", thickness == 20, false); err != nil {
+		win32.DestroyMenu(menu)
+		return 0, err
+	}
+	return menu, nil
+}
+
+func (s *Service) createTrailLengthMenu() (win32.HMENU, error) {
+	menu, err := win32.CreatePopupMenu()
+	if err != nil {
+		return 0, err
+	}
+	length := normalizeTrailLength(s.Config.Features.ShakeTrailLength)
+	if err := appendMenuItem(menu, trayTrailLengthShortCommand, "Length: Short", length == 280, false); err != nil {
+		win32.DestroyMenu(menu)
+		return 0, err
+	}
+	if err := appendMenuItem(menu, trayTrailLengthNormalCommand, "Length: Normal", length == 840, false); err != nil {
+		win32.DestroyMenu(menu)
+		return 0, err
+	}
+	if err := appendMenuItem(menu, trayTrailLengthLongCommand, "Length: Long", length == 1680, false); err != nil {
+		win32.DestroyMenu(menu)
+		return 0, err
+	}
+	return menu, nil
+}
+
+func (s *Service) createTrailFadeMenu() (win32.HMENU, error) {
+	menu, err := win32.CreatePopupMenu()
+	if err != nil {
+		return 0, err
+	}
+	fadeMs := normalizeTrailFadeMs(s.Config.Features.ShakeTrailFadeMs)
+	if err := appendMenuItem(menu, trayTrailFadeFastCommand, "Shrink Time: Fast", fadeMs == 160, false); err != nil {
+		win32.DestroyMenu(menu)
+		return 0, err
+	}
+	if err := appendMenuItem(menu, trayTrailFadeNormalCommand, "Shrink Time: Normal", fadeMs == 260, false); err != nil {
+		win32.DestroyMenu(menu)
+		return 0, err
+	}
+	if err := appendMenuItem(menu, trayTrailFadeSlowCommand, "Shrink Time: Slow", fadeMs == 520, false); err != nil {
+		win32.DestroyMenu(menu)
+		return 0, err
+	}
+	return menu, nil
 }
 
 func (s *Service) refreshTrayTip() {
@@ -276,9 +456,16 @@ func (s *Service) showAbout() error {
 		shakeState = "On"
 	}
 	shakeDelay := normalizeShakeDelay(s.Config.Features.ShakeHighlightDelayMs)
+	trailSummary := fmt.Sprintf(
+		"%s, %d px, %d px trail, %d ms shrink",
+		normalizeTrailColor(s.Config.Features.ShakeTrailColor),
+		normalizeTrailThickness(s.Config.Features.ShakeTrailThickness),
+		normalizeTrailLength(s.Config.Features.ShakeTrailLength),
+		normalizeTrailFadeMs(s.Config.Features.ShakeTrailFadeMs),
+	)
 
 	message := fmt.Sprintf(
-		"OJTools\n\nCursor remap: %s\nKeyboard lock: %s (%s)\nBlocked key: %s\nPair: %s <-> %s\nAuto-start: %s\nShake to find cursor: %s\nShake delay: %d ms\n%s\nConfig folder: %s",
+		"OJTools\n\nCursor remap: %s\nKeyboard lock: %s (%s)\nBlocked key: %s\nPair: %s <-> %s\nAuto-start: %s\nShake to find cursor: %s\nShake delay: %d ms\nTrail effect: %s\n%s\nConfig folder: %s",
 		remapState,
 		keyboardState,
 		keyboardLockHotkey,
@@ -288,6 +475,7 @@ func (s *Service) showAbout() error {
 		autoStartState,
 		shakeState,
 		shakeDelay,
+		trailSummary,
 		layoutSummary,
 		configDir,
 	)
@@ -307,4 +495,8 @@ func appendMenuItem(menu win32.HMENU, command uintptr, label string, checked boo
 
 func appendMenuSeparator(menu win32.HMENU) error {
 	return win32.AppendMenu(menu, win32.MF_SEPARATOR, 0, "")
+}
+
+func appendSubMenu(menu win32.HMENU, submenu win32.HMENU, label string) error {
+	return win32.AppendMenu(menu, win32.MF_POPUP|win32.MF_STRING, uintptr(submenu), label)
 }
