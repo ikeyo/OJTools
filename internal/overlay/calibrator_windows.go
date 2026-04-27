@@ -297,6 +297,16 @@ func (s *Session) paint() {
 	leftX := int32(92)
 	centerX := client.Width() / 2
 	rightX := client.Width() - 92
+	primary := s.Pair.PrimaryMonitor()
+	secondary := s.Pair.SecondaryMonitor()
+	primaryX := rightX
+	secondaryX := leftX
+	if s.Pair.PrimaryOnLeft() {
+		primaryX = leftX
+		secondaryX = rightX
+	}
+	secondaryStartValue := s.primaryValueForGlobalY(float64(secondary.Bounds.Top))
+	secondaryEndValue := s.primaryValueForGlobalY(float64(secondary.Bounds.Bottom))
 
 	s.drawBand(hdc, leftX, 16, client.Height()-16)
 	s.drawBand(hdc, rightX, 16, client.Height()-16)
@@ -314,21 +324,34 @@ func (s *Session) paint() {
 
 	s.drawText(hdc, 14, 14, fmt.Sprintf("Left  %s  %dx%d  %.0f%%  %d DPI", s.Pair.Left.DeviceName, s.Pair.Left.Bounds.Width(), s.Pair.Left.Bounds.Height(), s.Pair.Left.ScaleY*100, s.Pair.Left.DpiY))
 	s.drawText(hdc, 14, 34, fmt.Sprintf("Right %s  %dx%d  %.0f%%  %d DPI", s.Pair.Right.DeviceName, s.Pair.Right.Bounds.Width(), s.Pair.Right.Bounds.Height(), s.Pair.Right.ScaleY*100, s.Pair.Right.DpiY))
-	s.drawText(hdc, 14, 58, fmt.Sprintf("Scale %.4f   Offset %.1f px", s.Transform.Scale, s.Transform.Offset))
-	s.drawText(hdc, 14, 78, "Wheel / Left-Right: scale   Drag / Up-Down: offset   Enter/S: save   R: reset   Esc: close")
+	s.drawText(hdc, 14, 58, fmt.Sprintf("Primary -> Secondary  %s -> %s", primary.DeviceName, secondary.DeviceName))
+	s.drawText(hdc, 14, 78, fmt.Sprintf("Secondary starts at primary %.2f and ends at %.2f", secondaryStartValue, secondaryEndValue))
+	s.drawText(hdc, 14, 98, fmt.Sprintf("Scale %.4f   Offset %.1f px", s.Transform.Scale, s.Transform.Offset))
+	s.drawText(hdc, 14, 118, "Wheel / Left-Right: scale   Drag / Up-Down: offset   Enter/S: save   R: reset   Esc: close")
 
-	baseStep := float64(s.Pair.Left.Bounds.Height()) / 100.0
+	baseStep := float64(primary.Bounds.Height()) / 100.0
 	if baseStep < 3 {
 		baseStep = 3
 	}
 
 	for i := 0; i <= 100; i++ {
-		leftYGlobal := float64(s.Pair.Left.Bounds.Top) + (float64(i) * baseStep)
-		leftY := int32(math.Round(leftYGlobal)) - s.Top
-		rightY := int32(math.Round(calibration.MapLeftToRight(s.Pair, s.Transform, leftYGlobal))) - s.Top
+		primaryYGlobal := float64(primary.Bounds.Top) + (float64(i) * baseStep)
+		primaryY := int32(math.Round(primaryYGlobal)) - s.Top
 
-		s.drawTick(hdc, leftX, leftY, i)
-		s.drawTick(hdc, rightX, rightY, i)
+		s.drawTick(hdc, primaryX, primaryY, i)
+	}
+
+	startTick := int(math.Ceil(secondaryStartValue))
+	endTick := int(math.Floor(secondaryEndValue))
+	if startTick > endTick {
+		startTick, endTick = endTick, startTick
+	}
+
+	for value := startTick; value <= endTick; value++ {
+		primaryYGlobal := s.primaryGlobalYForValue(float64(value))
+		secondaryY := int32(math.Round(calibration.MapPrimaryToSecondary(s.Pair, s.Transform, primaryYGlobal))) - s.Top
+		label := value%10 == 0 || value == startTick
+		s.drawTickValue(hdc, secondaryX, secondaryY, value, label)
 	}
 }
 
@@ -354,22 +377,26 @@ func (s *Session) drawMonitorCaps(hdc win32.HDC, x, top, bottom int32) {
 }
 
 func (s *Session) drawTick(hdc win32.HDC, x, y int32, index int) {
-	if y < 98 || y > s.Height-16 {
+	s.drawTickValue(hdc, x, y, index, index%10 == 0)
+}
+
+func (s *Session) drawTickValue(hdc win32.HDC, x, y int32, value int, label bool) {
+	if y < 118 || y > s.Height-16 {
 		return
 	}
 
 	length := int32(10)
-	if index%10 == 0 {
+	if value%10 == 0 {
 		length = 26
-	} else if index%5 == 0 {
+	} else if value%5 == 0 {
 		length = 18
 	}
 
 	win32.MoveToEx(hdc, x-length, y)
 	win32.LineTo(hdc, x+length, y)
 
-	if index%10 == 0 {
-		s.drawText(hdc, x+34, y-8, fmt.Sprintf("%02d", index))
+	if label {
+		s.drawText(hdc, x+34, y-8, fmt.Sprintf("%d", value))
 	}
 }
 
@@ -378,16 +405,22 @@ func (s *Session) drawText(hdc win32.HDC, x, y int32, text string) {
 }
 
 func (s *Session) remap(prev, current win32.POINT) (win32.POINT, bool) {
-	if inside(prev, s.Pair.Left.Bounds) && current.X >= s.Pair.Right.Bounds.Left {
-		y := calibration.MapLeftToRight(s.Pair, s.Transform, float64(current.Y))
+	if crossingY, ok := s.Pair.CrossingFromLeftToRight(prev, current); ok {
+		y := calibration.MapSecondaryToPrimary(s.Pair, s.Transform, crossingY)
+		if s.Pair.PrimaryOnLeft() {
+			y = calibration.MapPrimaryToSecondary(s.Pair, s.Transform, crossingY)
+		}
 		return win32.POINT{
 			X: s.Pair.Right.Bounds.Left + 2,
 			Y: clamp(int32(math.Round(y)), s.Pair.Right.Bounds.Top, s.Pair.Right.Bounds.Bottom-1),
 		}, true
 	}
 
-	if inside(prev, s.Pair.Right.Bounds) && current.X < s.Pair.Left.Bounds.Right {
-		y := calibration.MapRightToLeft(s.Pair, s.Transform, float64(current.Y))
+	if crossingY, ok := s.Pair.CrossingFromRightToLeft(prev, current); ok {
+		y := calibration.MapPrimaryToSecondary(s.Pair, s.Transform, crossingY)
+		if s.Pair.PrimaryOnLeft() {
+			y = calibration.MapSecondaryToPrimary(s.Pair, s.Transform, crossingY)
+		}
 		return win32.POINT{
 			X: s.Pair.Left.Bounds.Right - 2,
 			Y: clamp(int32(math.Round(y)), s.Pair.Left.Bounds.Top, s.Pair.Left.Bounds.Bottom-1),
@@ -395,13 +428,6 @@ func (s *Session) remap(prev, current win32.POINT) (win32.POINT, bool) {
 	}
 
 	return win32.POINT{}, false
-}
-
-func inside(point win32.POINT, rect win32.RECT) bool {
-	return point.X >= rect.Left &&
-		point.X < rect.Right &&
-		point.Y >= rect.Top &&
-		point.Y < rect.Bottom
 }
 
 func clamp(v, min, max int32) int32 {
@@ -428,4 +454,19 @@ func clampTransform(transform config.Transform) config.Transform {
 		transform.Offset = 0
 	}
 	return transform
+}
+
+func (s *Session) primaryValueForGlobalY(y float64) float64 {
+	primary := s.Pair.PrimaryMonitor()
+	height := float64(primary.Bounds.Height())
+	if height == 0 {
+		return 0
+	}
+
+	return ((y - float64(primary.Bounds.Top)) / height) * 100.0
+}
+
+func (s *Session) primaryGlobalYForValue(value float64) float64 {
+	primary := s.Pair.PrimaryMonitor()
+	return float64(primary.Bounds.Top) + (float64(primary.Bounds.Height()) * value / 100.0)
 }

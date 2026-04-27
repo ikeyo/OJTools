@@ -241,6 +241,15 @@ func captureWindows() ([]WindowRecord, error) {
 		if err := win32.GetWindowPlacement(hwnd, &placement); err != nil {
 			return true
 		}
+		if isMinimizedShowCmd(placement.ShowCmd) {
+			return true
+		}
+		savedBounds := placement.RcNormalPosition
+		if win32.IsWindowArranged(hwnd) {
+			if bounds, err := currentWindowBounds(hwnd); err == nil {
+				savedBounds = bounds
+			}
+		}
 
 		windows = append(windows, WindowRecord{
 			Title:     title,
@@ -251,7 +260,7 @@ func captureWindows() ([]WindowRecord, error) {
 				ShowCmd:        placement.ShowCmd,
 				MinPosition:    placement.PtMinPosition,
 				MaxPosition:    placement.PtMaxPosition,
-				NormalPosition: placement.RcNormalPosition,
+				NormalPosition: savedBounds,
 			},
 		})
 
@@ -296,6 +305,17 @@ func processPath(pid uint32) (string, error) {
 	return win32.QueryFullProcessImageName(process)
 }
 
+func currentWindowBounds(hwnd win32.HWND) (win32.RECT, error) {
+	var rect win32.RECT
+	if err := win32.DwmGetExtendedFrameBounds(hwnd, &rect); err == nil {
+		return rect, nil
+	}
+	if err := win32.GetWindowRect(hwnd, &rect); err != nil {
+		return win32.RECT{}, err
+	}
+	return rect, nil
+}
+
 func skipClass(className string) bool {
 	switch strings.ToLower(className) {
 	case "shell_traywnd", "progman", "workerw":
@@ -336,7 +356,7 @@ func findWindow(record WindowRecord, used map[win32.HWND]bool) (win32.HWND, bool
 	bestScore := -1
 
 	_ = win32.EnumWindows(func(hwnd win32.HWND) bool {
-		if used[hwnd] || !win32.IsWindowVisible(hwnd) {
+		if used[hwnd] {
 			return true
 		}
 
@@ -353,6 +373,12 @@ func findWindow(record WindowRecord, used map[win32.HWND]bool) (win32.HWND, bool
 		title, _ := win32.GetWindowText(hwnd)
 		className, _ := win32.GetClassName(hwnd)
 		score := 1
+		if win32.IsWindowVisible(hwnd) {
+			score += 4
+		}
+		if strings.TrimSpace(title) != "" {
+			score++
+		}
 		if strings.EqualFold(strings.TrimSpace(title), strings.TrimSpace(record.Title)) {
 			score += 4
 		}
@@ -371,6 +397,21 @@ func findWindow(record WindowRecord, used map[win32.HWND]bool) (win32.HWND, bool
 }
 
 func applyPlacement(hwnd win32.HWND, placement Placement) error {
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if err := applyPlacementOnce(hwnd, placement); err == nil {
+			return nil
+		} else {
+			lastErr = err
+		}
+
+		time.Sleep(250 * time.Millisecond)
+	}
+
+	return lastErr
+}
+
+func applyPlacementOnce(hwnd win32.HWND, placement Placement) error {
 	windowPlacement := win32.WINDOWPLACEMENT{
 		Flags:            placement.Flags,
 		ShowCmd:          placement.ShowCmd,
@@ -378,5 +419,65 @@ func applyPlacement(hwnd win32.HWND, placement Placement) error {
 		PtMaxPosition:    placement.MaxPosition,
 		RcNormalPosition: placement.NormalPosition,
 	}
-	return win32.SetWindowPlacement(hwnd, &windowPlacement)
+	if err := win32.SetWindowPlacement(hwnd, &windowPlacement); err != nil {
+		return err
+	}
+
+	width := placement.NormalPosition.Width()
+	height := placement.NormalPosition.Height()
+	if width > 0 && height > 0 {
+		win32.ShowWindow(hwnd, win32.SW_RESTORE)
+		if err := win32.SetWindowPos(
+			hwnd,
+			0,
+			placement.NormalPosition.Left,
+			placement.NormalPosition.Top,
+			width,
+			height,
+			win32.SWP_NOZORDER|win32.SWP_NOACTIVATE,
+		); err != nil {
+			return err
+		}
+	}
+
+	switch placement.ShowCmd {
+	case win32.SW_SHOWMAXIMIZED:
+		win32.ShowWindow(hwnd, win32.SW_SHOWMAXIMIZED)
+	case win32.SW_SHOWMINIMIZED, win32.SW_MINIMIZE:
+		win32.ShowWindow(hwnd, int32(placement.ShowCmd))
+	default:
+		win32.ShowWindow(hwnd, win32.SW_SHOWNORMAL)
+	}
+
+	if !isMinimizedShowCmd(placement.ShowCmd) && placement.ShowCmd != win32.SW_SHOWMAXIMIZED {
+		time.Sleep(150 * time.Millisecond)
+
+		var rect win32.RECT
+		if err := win32.GetWindowRect(hwnd, &rect); err != nil {
+			return err
+		}
+		if !rectCloseEnough(rect, placement.NormalPosition, 24) {
+			return errors.New("window did not keep restored position")
+		}
+	}
+
+	return nil
+}
+
+func isMinimizedShowCmd(showCmd uint32) bool {
+	return showCmd == win32.SW_SHOWMINIMIZED || showCmd == win32.SW_MINIMIZE
+}
+
+func rectCloseEnough(actual, expected win32.RECT, tolerance int32) bool {
+	return abs32(actual.Left-expected.Left) <= tolerance &&
+		abs32(actual.Top-expected.Top) <= tolerance &&
+		abs32(actual.Right-expected.Right) <= tolerance &&
+		abs32(actual.Bottom-expected.Bottom) <= tolerance
+}
+
+func abs32(v int32) int32 {
+	if v < 0 {
+		return -v
+	}
+	return v
 }

@@ -18,21 +18,24 @@ import (
 )
 
 func main() {
+	command := commandFromArgs(os.Args[1:])
+	consoleHidden := hideConsoleForCommand(command)
+
 	if err := win32.SetPerMonitorV2(); err != nil {
 		// Ignore if Windows has already set DPI awareness for this process.
 	}
 
 	if err := run(os.Args[1:]); err != nil {
+		if consoleHidden {
+			_ = win32.MessageBox(0, fmt.Sprintf("OJTools error:\n\n%v", err), "OJTools", win32.MB_OK)
+		}
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }
 
 func run(args []string) error {
-	command := "calibrate"
-	if len(args) > 0 {
-		command = args[0]
-	}
+	command := commandFromArgs(args)
 
 	switch command {
 	case "inspect":
@@ -48,6 +51,29 @@ func run(args []string) error {
 		printUsage()
 		return fmt.Errorf("unknown command %q", command)
 	}
+}
+
+func commandFromArgs(args []string) string {
+	command := "calibrate"
+	if len(args) > 0 {
+		command = args[0]
+	}
+	return command
+}
+
+func hideConsoleForCommand(command string) bool {
+	switch command {
+	case "inspect", "help", "-h", "--help":
+		return false
+	}
+
+	hwnd := win32.GetConsoleWindow()
+	if hwnd == 0 {
+		return false
+	}
+
+	win32.ShowWindow(hwnd, win32.SW_HIDE)
+	return true
 }
 
 func runInspect() error {

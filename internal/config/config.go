@@ -22,8 +22,14 @@ type PairCalibration struct {
 }
 
 type Features struct {
-	ShakeCursorHighlight  bool `json:"shakeCursorHighlight"`
-	ShakeHighlightDelayMs int  `json:"shakeHighlightDelayMs"`
+	ShakeCursorHighlight  bool   `json:"shakeCursorHighlight"`
+	ShakeHighlightDelayMs int    `json:"shakeHighlightDelayMs"`
+	ShakeTrailColor       string `json:"shakeTrailColor"`
+	ShakeTrailThickness   int    `json:"shakeTrailThickness"`
+	ShakeTrailLength      int    `json:"shakeTrailLength"`
+	ShakeTrailFadeMs      int    `json:"shakeTrailFadeMs"`
+	BlockedKeyEnabled     bool   `json:"blockedKeyEnabled"`
+	BlockedVK             uint32 `json:"blockedVK"`
 }
 
 type Config struct {
@@ -39,6 +45,12 @@ func Default() Config {
 		Features: Features{
 			ShakeCursorHighlight:  true,
 			ShakeHighlightDelayMs: 500,
+			ShakeTrailColor:       "mint",
+			ShakeTrailThickness:   13,
+			ShakeTrailLength:      840,
+			ShakeTrailFadeMs:      260,
+			BlockedKeyEnabled:     false,
+			BlockedVK:             0,
 		},
 	}
 }
@@ -90,4 +102,11 @@ func (c *Config) Put(cal PairCalibration) {
 func (c Config) Get(pairKey string) (PairCalibration, bool) {
 	cal, ok := c.Calibrations[pairKey]
 	return cal, ok
+}
+
+func (c *Config) Delete(pairKey string) {
+	if c.Calibrations == nil {
+		return
+	}
+	delete(c.Calibrations, pairKey)
 }

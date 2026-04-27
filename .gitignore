@@ -3,6 +3,7 @@
 *.dll
 *.test
 *.out
+*.syso
 config.json
 window-layout.json
-
+.build/
